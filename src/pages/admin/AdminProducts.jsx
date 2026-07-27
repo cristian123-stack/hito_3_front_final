@@ -3,17 +3,33 @@ import AdminLayout from '../../components/layout/AdminLayout';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { useApp } from '../../context/AppContext';
 
+// Mapeo práctico para convertir Nombre <-> ID de categoría de PostgreSQL
+const CATEGORIES_MAP = [
+  { id: 1, name: 'Perros' },
+  { id: 2, name: 'Gatos' },
+];
+
 const EMPTY_FORM = {
-  name: '', price: '', originalPrice: '', category: 'Perros',
+  name: '', price: '', originalPrice: '', categoryId: 1,
   badge: '', description: '', stock: '', rating: '5', reviews: '0', imageUrl: '',
 };
-const CATEGORIES = ['Perros', 'Gatos', 'Ambos'];
+
 const BADGES = ['', 'Popular', 'Nuevo', 'Oferta', 'Mejor Valorado'];
 
 const ProductFormModal = ({ product, onClose, onSave, saving }) => {
   const [form, setForm] = useState(
     product
-      ? { ...product, price: String(product.price), originalPrice: String(product.originalPrice || ''), stock: String(product.stock), rating: String(product.rating), reviews: String(product.reviews), imageUrl: product.imageUrl || '' }
+      ? { 
+          ...product, 
+          price: String(product.price), 
+          originalPrice: String(product.originalPrice || ''), 
+          stock: String(product.stock), 
+          rating: String(product.rating), 
+          reviews: String(product.reviews), 
+          imageUrl: product.imageUrl || '',
+          // Nos aseguramos de capturar el ID numérico
+          categoryId: product.categoryId || (typeof product.category === 'object' ? product.category?.id : 1) || 1
+        }
       : EMPTY_FORM
   );
   const [errors, setErrors] = useState({});
@@ -39,6 +55,7 @@ const ProductFormModal = ({ product, onClose, onSave, saving }) => {
       stock: Number(form.stock),
       rating: Number(form.rating),
       reviews: Number(form.reviews),
+      categoryId: Number(form.categoryId), // 👈 Enviamos categoryId a PostgreSQL
       badge: form.badge || null,
       imageUrl: form.imageUrl || null,
     });
@@ -92,8 +109,8 @@ const ProductFormModal = ({ product, onClose, onSave, saving }) => {
           <div className="grid grid-cols-3 gap-md">
             <div>
               <label className="font-label-md text-label-md text-on-surface-variant block mb-1">Categoría</label>
-              <select value={form.category} onChange={handleChange('category')} className={inputClass('category')}>
-                {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              <select value={form.categoryId} onChange={handleChange('categoryId')} className={inputClass('categoryId')}>
+                {CATEGORIES_MAP.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div>
@@ -151,9 +168,19 @@ const AdminProducts = () => {
   const formatPrice = (p) =>
     Number(p)?.toLocaleString('es-CL', { style: 'currency', currency: 'CLP', minimumFractionDigits: 0 });
 
+  // Función auxiliar para obtener el nombre seguro de la categoría
+  const getCategoryName = (p) => {
+    if (typeof p.category === 'object' && p.category?.name) return p.category.name;
+    if (p.categoryId === 1) return 'Perros';
+    if (p.categoryId === 2) return 'Gatos';
+    if (typeof p.category === 'string') return p.category;
+    return 'Sin categoría';
+  };
+
   const filtered = products.filter((p) => {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase());
-    const matchCat = categoryFilter === 'Todos' || p.category === categoryFilter;
+    const catName = getCategoryName(p);
+    const matchCat = categoryFilter === 'Todos' || catName === categoryFilter;
     return matchSearch && matchCat;
   });
 
@@ -201,8 +228,8 @@ const AdminProducts = () => {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-md">
               {[
                 { label: 'Total', value: products.length, icon: 'inventory_2' },
-                { label: 'Perros', value: products.filter((p) => p.category === 'Perros').length, icon: 'pets' },
-                { label: 'Gatos', value: products.filter((p) => p.category === 'Gatos').length, icon: 'pets' },
+                { label: 'Perros', value: products.filter((p) => getCategoryName(p) === 'Perros').length, icon: 'pets' },
+                { label: 'Gatos', value: products.filter((p) => getCategoryName(p) === 'Gatos').length, icon: 'pets' },
                 { label: 'Sin stock', value: products.filter((p) => p.stock === 0).length, icon: 'remove_shopping_cart' },
               ].map((stat) => (
                 <div key={stat.label} className="bg-surface-container-lowest rounded-xl p-md shadow-[0px_4px_20px_rgba(0,0,0,0.04)] flex items-center gap-md">
@@ -223,7 +250,7 @@ const AdminProducts = () => {
                 <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar producto..." className="w-full pl-9 pr-4 py-2 rounded-lg border border-outline-variant bg-surface-container-lowest font-body-sm text-body-sm focus:outline-none focus:ring-2 focus:ring-primary" />
               </div>
               <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="py-2 px-3 rounded-lg border border-outline-variant bg-surface-container-lowest font-body-sm text-body-sm focus:outline-none focus:ring-2 focus:ring-primary">
-                {['Todos', ...CATEGORIES].map((c) => <option key={c} value={c}>{c}</option>)}
+                {['Todos', 'Perros', 'Gatos'].map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
 
@@ -254,7 +281,10 @@ const AdminProducts = () => {
                           <p className="font-label-md text-label-md text-on-surface line-clamp-1 max-w-[200px]">{product.name}</p>
                           <p className="font-body-sm text-body-sm text-on-surface-variant line-clamp-1 max-w-[200px]">{product.description}</p>
                         </td>
-                        <td className="px-md py-sm font-body-sm text-body-sm text-on-surface-variant">{product.category}</td>
+                        <td className="px-md py-sm font-body-sm text-body-sm text-on-surface-variant">
+                          {/* 👈 Renderizado seguro del texto de la categoría para evitar el Error #31 */}
+                          {getCategoryName(product)}
+                        </td>
                         <td className="px-md py-sm">
                           <p className="font-label-md text-label-md text-primary">{formatPrice(product.price)}</p>
                           {product.originalPrice && <p className="font-body-sm text-body-sm text-on-surface-variant line-through">{formatPrice(product.originalPrice)}</p>}
