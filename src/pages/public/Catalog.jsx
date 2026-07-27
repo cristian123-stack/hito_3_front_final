@@ -36,29 +36,37 @@ const Catalog = () => {
   const filtered = useMemo(() => {
     let list = [...products];
 
-    // Búsqueda por texto
+    // 1. Filtro por nombre
     const query = search.trim().toLowerCase();
     if (query) {
       list = list.filter((p) => p.name?.toLowerCase().includes(query));
     }
 
-    // Filtrado por categoría
+    // 2. Filtro por categoría (Robusto)
     if (selectedCat === 'Perros') {
-      list = list.filter((p) => p.category?.name === 'Perros' || p.category?.name === 'Ambos');
+      list = list.filter((p) => {
+        const catName = p.category?.name || (typeof p.category === 'string' ? p.category : '');
+        const catId = p.category_id || p.categoryId;
+        return catName === 'Perros' || catName === 'Ambos' || catId === 1;
+      });
     } else if (selectedCat === 'Gatos') {
-      list = list.filter((p) => p.category?.name === 'Gatos' || p.category?.name === 'Ambos');
+      list = list.filter((p) => {
+        const catName = p.category?.name || (typeof p.category === 'string' ? p.category : '');
+        const catId = p.category_id || p.categoryId;
+        return catName === 'Gatos' || catName === 'Ambos' || catId === 2;
+      });
     }
 
-    // Filtrado por precio
+    // 3. Filtro por rango de precio
     list = list.filter((p) => {
-      const price = p.price ?? 0;
+      const price = Number(p.price) || 0;
       return price >= priceRange[0] && price <= priceRange[1];
     });
 
-    // Ordenamiento (sin mutar el arreglo original)
-    if (sort === 'price-asc') list.sort((a, b) => (a.price ?? 0) - (b.price ?? 0));
-    if (sort === 'price-desc') list.sort((a, b) => (b.price ?? 0) - (a.price ?? 0));
-    if (sort === 'rating') list.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+    // 4. Ordenamiento sin mutación
+    if (sort === 'price-asc') list = [...list].sort((a, b) => (a.price || 0) - (b.price || 0));
+    if (sort === 'price-desc') list = [...list].sort((a, b) => (b.price || 0) - (a.price || 0));
+    if (sort === 'rating') list = [...list].sort((a, b) => (b.rating || 0) - (a.rating || 0));
 
     return list;
   }, [products, search, selectedCat, sort, priceRange]);
@@ -67,10 +75,10 @@ const Catalog = () => {
     p.toLocaleString('es-CL', { style: 'currency', currency: 'CLP', minimumFractionDigits: 0 });
 
   const handleResetFilters = () => {
+    setSelectedCat('Todos');
     setSearch('');
     setSort('featured');
     setPriceRange([0, 60000]);
-    setSearchParams({});
   };
 
   return (
@@ -80,7 +88,7 @@ const Catalog = () => {
           <div>
             <h1 className="font-display-lg-mobile md:text-display-lg text-on-surface">Catálogo</h1>
             <p className="text-on-surface-variant font-body-md text-body-md">
-              {filtered.length} {filtered.length === 1 ? 'producto encontrado' : 'productos encontrados'}
+              {filtered.length} productos encontrados
             </p>
           </div>
           <div className="flex items-center gap-sm flex-wrap">
@@ -91,14 +99,12 @@ const Catalog = () => {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar productos..."
-                aria-label="Buscar productos"
                 className="pl-10 pr-4 py-2 rounded-lg border border-outline-variant bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary font-body-md text-body-md w-48 md:w-64"
               />
             </div>
             <select
               value={sort}
               onChange={(e) => setSort(e.target.value)}
-              aria-label="Ordenar por"
               className="py-2 px-3 rounded-lg border border-outline-variant bg-surface-container-lowest font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-primary"
             >
               {SORT_OPTIONS.map((o) => (
@@ -109,7 +115,6 @@ const Catalog = () => {
             </select>
             <button
               onClick={() => setShowFilters(!showFilters)}
-              aria-label="Mostrar u ocultar filtros"
               className="md:hidden p-2 rounded-lg border border-outline-variant bg-surface-container-lowest"
             >
               <span className="material-symbols-outlined text-on-surface-variant">filter_list</span>
@@ -148,7 +153,6 @@ const Catalog = () => {
                   step={1000}
                   value={priceRange[1]}
                   onChange={(e) => setPriceRange([0, Number(e.target.value)])}
-                  aria-label="Filtro por precio máximo"
                   className="w-full accent-primary"
                 />
                 <div className="flex justify-between font-body-sm text-body-sm text-on-surface-variant mt-1">
